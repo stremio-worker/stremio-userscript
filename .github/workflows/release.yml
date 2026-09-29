@@ -1,7 +1,7 @@
 name: Release
 
-# Her surum yukseltmesinde (package.json + metadata.txt) calisir.
-# Tag'i push ederek de tetiklenebilir: git tag v1.2.3 && git push origin v1.2.3
+# Runs on every version bump (package.json + metadata.txt).
+# Can also be triggered by pushing a tag: git tag v1.2.3 && git push origin v1.2.3
 on:
   push:
     branches: [main]
@@ -9,15 +9,15 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Surum (bos birakilirsa package.json okunur)'
+        description: 'Version (read from package.json when left empty)'
         required: false
 
 permissions:
   contents: write
 
 concurrency:
-  # main ve tag push'u ayni anda tetiklenebilir; tek kuyrukta sirlaya alip
-  # yarismayi onluyoruz (ikinci calisma release'i gunceller).
+  # A main push and a tag push can fire at the same time; a single queue
+  # serialises them so they do not race (the second run updates the release).
   group: release
   cancel-in-progress: false
 
@@ -34,7 +34,7 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: surumu belirle
+      - name: Resolve version
         id: version
         run: |
           version="${{ inputs.version }}"
@@ -42,14 +42,14 @@ jobs:
             version=$(node -p "require('./package.json').version")
           fi
           if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::gecersiz surum: $version"
+            echo "::error::invalid version: $version"
             exit 1
           fi
           echo "value=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
-          echo "surum: $version"
+          echo "version: $version"
 
-      - name: metadata.txt surumunun esitligini dogrula
+      - name: Verify metadata.txt version matches
         run: |
           meta=$(sed -n 's|^// @version[[:space:]]\+||p' metadata.txt)
           if [ "$meta" != "${{ steps.version.outputs.value }}" ]; then
@@ -57,21 +57,21 @@ jobs:
             exit 1
           fi
 
-      - name: release zaten var mi
+      - name: Check for an existing release
         id: existing
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
-          # Git etiketi ile GitHub release'i farkli seyler. Etiket push'lanmis
-          # olabilir ama release henuz olusmus olmayabilir; bu yuzden gh ile
-          # soruyoruz, git ref'ine bakarak degil.
+          # A git tag and a GitHub release are different things. The tag can
+          # already be pushed while no release exists for it yet, so ask gh
+          # instead of looking at a git ref.
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "value=true" >> "$GITHUB_OUTPUT"
-            echo "release $TAG zaten var, guncellenecek"
+            echo "release $TAG already exists, updating it"
           else
             echo "value=false" >> "$GITHUB_OUTPUT"
-            echo "release $TAG yok, olusturulacak"
+            echo "release $TAG not found, creating it"
           fi
 
       - run: npm ci
@@ -79,16 +79,16 @@ jobs:
       - run: npm run test
       - run: npm run build:min
 
-      - name: dist icerigini dogrula
+      - name: Verify dist output
         run: |
           artifact="dist/stremio-local-proxy-hls.user.js"
           if [ ! -s "$artifact" ]; then
-            echo "::error::$artifact bos ya da yok"
+            echo "::error::$artifact is missing or empty"
             exit 1
           fi
-          echo "$(wc -c < "$artifact") bayt, $artifact"
+          echo "$(wc -c < "$artifact") bytes, $artifact"
 
-      - name: release olustur / guncelle
+      - name: Create or update release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
@@ -98,10 +98,10 @@ jobs:
           if [ "$EXISTING" = "true" ]; then
             gh release edit "$TAG" --title "v$VERSION" --notes-file release-notes.md
             gh release upload "$TAG" dist/*.user.js --clobber
-            echo "guncellendi: $TAG"
+            echo "updated: $TAG"
           else
             gh release create "$TAG" dist/*.user.js \
               --title "v$VERSION" \
               --notes-file release-notes.md
-            echo "olusturuldu: $TAG"
+            echo "created: $TAG"
           fi
