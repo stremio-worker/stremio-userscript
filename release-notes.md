@@ -1,15 +1,17 @@
 # Stremio Local Proxy HLS
 
-Stremio Web'in `http://127.0.0.1:11470/proxy/...` isteklerini `GM_xmlhttpRequest` uzerinden
-gecirip hls.js/MSE ile oynatan userscript.
+A userscript that routes Stremio Web's `http://127.0.0.1:11470/proxy/...` requests through
+`GM_xmlhttpRequest` and plays them with hls.js/MSE.
 
-## Kurulum
+## Install
 
-`stremio-local-proxy-hls.user.js` dosyasini indirip Violentmonkey veya Tampermonkey'nin
-"yeni script ekle" ekranina yapistirin. Ardindan Stremio Web sekmesini yenileyin.
+Download `stremio-local-proxy-hls.user.js` from the
+[releases page](https://github.com/stremio-worker/stremio-userscript/releases) and paste it
+into your userscript manager's "add new script" screen, or point the manager at the file if
+it can read a local path. Reload the Stremio Web tab afterwards.
 
-## Notlar
+## Notes
 
-- hls.js paketlenmez; `metadata.txt` icindeki `@require` satiri sayesinde
-  userscript yoneticisi tarafindan yuklenir.
-- Kurulum `hls.js`'in bir parcasi yanlislikla bundle'a girerse `build.mjs` hata verir.
+- hls.js is not bundled. The `@require` line in `metadata.txt` makes the userscript manager
+  load it instead.
+- If a piece of hls.js ever slips into the bundle, `build.mjs` fails the build.
