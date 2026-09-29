@@ -37,9 +37,16 @@ output (a stray `import 'hls.js'` would silently inline a second ~1 MB player).
 ## Releasing
 
 Bump the version in **both** `package.json` (`version`) and `metadata.txt` (`@version`), then
-push to `main`. The `Release` workflow runs `typecheck`, `test` and `build:min`, attaches
-`dist/stremio-local-proxy-hls.user.js` to a `v<version>` release, and writes the notes from
-`release-notes.md`. The two version fields must match, otherwise the job fails.
+push to `main`. The two fields must match, otherwise the job fails.
+
+Pushing a tag (`git tag v1.2.3 && git push origin v1.2.3`) publishes that version too, and the
+workflow can be run by hand from the Actions tab.
+
+A single `ci.yml` workflow handles both. Its `check` job runs on every PR and push, and its
+`release` job waits for `check` and only runs when the version actually changed, so a
+docs-only push publishes nothing. `release` downloads the bundle that `check` already built
+rather than rebuilding it: the published file is byte for byte the one that passed the tests.
+The release notes come from `release-notes.md`.
 
 ## How it works
 

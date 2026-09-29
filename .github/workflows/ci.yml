@@ -1,32 +1,99 @@
 name: CI
 
+# One workflow for both jobs:
+#   check   - runs on every PR and every push, and must pass.
+#   release - needs check, and only publishes when the version changed.
+#
+# Because release waits for check and reuses its artifact, the test suite runs
+# once per commit and the file that gets published is the exact one CI verified.
+
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (read from package.json when left empty)'
+        required: false
 
 permissions:
   contents: read
 
 concurrency:
+  # Per-ref so PR runs supersede each other. cancel-in-progress is off: a push
+  # that bumps the version must not be cancelled after it has published.
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   check:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.value }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      changed: ${{ steps.resolve.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
+      - name: Resolve version
+        id: resolve
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          version="$INPUT_VERSION"
+          if [ -z "$version" ]; then
+            version=$(node -p "require('./package.json').version")
+          fi
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::invalid version: $version"
+            exit 1
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "version: $version"
+
+          if [ "$EVENT" != "push" ]; then
+            echo "changed=true (event: $EVENT)"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # A tag push is an explicit request to publish that tag.
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "changed=true (tag push: $GITHUB_REF_NAME)"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          previous=$(git show HEAD^:package.json 2>/dev/null \
+            | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version" 2>/dev/null || echo "")
+
+          if [ -z "$previous" ]; then
+            echo "changed=true (no previous commit to compare against)"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          elif [ "$previous" = "$version" ]; then
+            echo "changed=false (version still $version, nothing to publish)"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true ($previous -> $version)"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - run: npm ci
 
-      - name: version consistency
+      - name: Version consistency
+        env:
+          VERSION: ${{ steps.resolve.outputs.value }}
         run: |
           pkg=$(node -p "require('./package.json').version")
           meta=$(sed -n 's|^// @version[[:space:]]\+||p' metadata.txt)
@@ -39,4 +106,80 @@ jobs:
 
       - run: npm run typecheck
       - run: npm run test
-      - run: npm run build
+      - run: npm run build:min
+
+      - name: Verify dist output
+        run: |
+          artifact="dist/stremio-local-proxy-hls.user.js"
+          if [ ! -s "$artifact" ]; then
+            echo "::error::$artifact is missing or empty"
+            exit 1
+          fi
+          echo "$(wc -c < "$artifact") bytes, $artifact"
+
+      - name: Upload built userscript
+        uses: actions/upload-artifact@v4
+        with:
+          name: userscript
+          path: dist/stremio-local-proxy-hls.user.js
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    needs: check
+    if: needs.check.result == 'success' && needs.check.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Download built userscript
+        uses: actions/download-artifact@v4
+        with:
+          name: userscript
+          path: dist
+
+      - name: Check for an existing release
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.check.outputs.tag }}
+        run: |
+          # A git tag and a GitHub release are different things. The tag can
+          # already be pushed while no release exists for it yet, so ask gh
+          # instead of looking at a git ref.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "value=true" >> "$GITHUB_OUTPUT"
+            echo "release $TAG already exists, updating it"
+          else
+            echo "value=false" >> "$GITHUB_OUTPUT"
+            echo "release $TAG not found, creating it"
+          fi
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.check.outputs.tag }}
+          VERSION: ${{ needs.check.outputs.version }}
+          SHA: ${{ github.sha }}
+          EXISTING: ${{ steps.existing.outputs.value }}
+        run: |
+          if [ "$EXISTING" = "true" ]; then
+            gh release edit "$TAG" --title "v$VERSION" --notes-file release-notes.md
+            gh release upload "$TAG" dist/*.user.js --clobber
+            echo "updated: $TAG"
+          else
+            # --target matters: without it gh points a newly created tag at the
+            # current main HEAD, which is a later commit than the version bump
+            # if anything else was pushed in the meantime.
+            gh release create "$TAG" dist/*.user.js \
+              --title "v$VERSION" \
+              --notes-file release-notes.md \
+              --target "$SHA"
+            echo "created: $TAG"
+          fi
