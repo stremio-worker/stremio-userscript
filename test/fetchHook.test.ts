@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test, { afterEach, beforeEach } from 'node:test';
 
 import { resetCapabilities } from '../src/capabilities';
-import { LOCAL_ORIGIN } from '../src/config';
+import { DEFAULT_LOCAL_ORIGIN as LOCAL_ORIGIN } from '../src/config';
 import { configureEnv } from '../src/env';
 import { installFetchHook } from '../src/fetchHook';
 import { buildProxyUrl } from '../src/proxyUrl';

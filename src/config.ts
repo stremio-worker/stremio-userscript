@@ -1,11 +1,14 @@
-// Every tunable in one place. Nothing here is read from the network, from the
-// page, or from a userscript value: the script's behaviour is fixed at build
-// time so a hostile page cannot reconfigure it.
+// Every tunable in one place. Nothing here is read from the network or from the
+// page. One exception: the local service's origin is user-configurable through
+// the userscript manager's menu and stored with GM_setValue, because it cannot
+// be discovered. See settings.ts — the value is still validated, and a stored
+// value that is not a local origin falls back to the default below.
 
-export const LOCAL_ORIGIN = 'http://127.0.0.1:11470';
-export const LOCAL_HOST = '127.0.0.1';
-export const LOCAL_PORT = '11470';
-export const LOCAL_SCHEME = 'http:';
+/** The origin used when the user has not changed it. */
+export const DEFAULT_LOCAL_ORIGIN = 'http://127.0.0.1:11470';
+export const DEFAULT_LOCAL_HOST = '127.0.0.1';
+export const DEFAULT_LOCAL_PORT = '11470';
+export const DEFAULT_LOCAL_SCHEME = 'http:';
 
 /** The local server only rewrites playlists under this prefix (service/server.js:218). */
 export const PROXY_PATH_PREFIX = '/proxy/';

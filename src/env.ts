@@ -62,6 +62,11 @@ export interface GmHandle {
 
 export type GmRequestFn = (details: GmRequestDetails) => GmHandle | void;
 
+export type GmGetValueFn = (key: string, defaultValue?: unknown) => unknown;
+export type GmSetValueFn = (key: string, value: string) => void;
+export type GmDeleteValueFn = (key: string) => void;
+export type GmMenuFn = (caption: string, handler: () => void) => string | number | undefined;
+
 export interface Env {
   /** The userscript sandbox global. */
   sandboxGlobal: any;
@@ -71,6 +76,14 @@ export interface Env {
   gmRequest: GmRequestFn | null;
   /** hls.js constructor injected through @require, or null. */
   hls: HlsConstructor | null;
+  /** GM_getValue, or null when the manager does not provide it. */
+  gmGetValue: GmGetValueFn | null;
+  /** GM_setValue, or null when the manager does not provide it. */
+  gmSetValue: GmSetValueFn | null;
+  /** GM_deleteValue, or null when the manager does not provide it. */
+  gmDeleteValue: GmDeleteValueFn | null;
+  /** GM_registerMenuCommand, or null when the manager has no menu. */
+  gmRegisterMenuCommand: GmMenuFn | null;
 }
 
 function sandboxGlobal(): any {
@@ -92,6 +105,23 @@ function detectGmRequest(): GmRequestFn | null {
   return null;
 }
 
+function detectStorage(): { get: GmGetValueFn | null; set: GmSetValueFn | null; del: GmDeleteValueFn | null } {
+  const sandbox = sandboxGlobal();
+  const gm = sandbox.GM;
+  return {
+    get: typeof sandbox.GM_getValue === 'function' ? sandbox.GM_getValue : (typeof gm?.getValue === 'function' ? gm.getValue : null),
+    set: typeof sandbox.GM_setValue === 'function' ? sandbox.GM_setValue : (typeof gm?.setValue === 'function' ? gm.setValue : null),
+    del: typeof sandbox.GM_deleteValue === 'function' ? sandbox.GM_deleteValue : (typeof gm?.deleteValue === 'function' ? gm.deleteValue : null),
+  };
+}
+
+function detectMenu(): GmMenuFn | null {
+  const sandbox = sandboxGlobal();
+  if (typeof sandbox.GM_registerMenuCommand === 'function') return sandbox.GM_registerMenuCommand;
+  if (typeof sandbox.GM?.registerMenuCommand === 'function') return sandbox.GM.registerMenuCommand;
+  return null;
+}
+
 function detectHls(): HlsConstructor | null {
   const sandbox = sandboxGlobal();
   const page = detectPage();
@@ -104,11 +134,17 @@ function detectHls(): HlsConstructor | null {
   return null;
 }
 
+const storage = detectStorage();
+
 export const env: Env = {
   sandboxGlobal: sandboxGlobal(),
   page: detectPage(),
   gmRequest: detectGmRequest(),
   hls: null,
+  gmGetValue: storage.get,
+  gmSetValue: storage.set,
+  gmDeleteValue: storage.del,
+  gmRegisterMenuCommand: detectMenu(),
 };
 
 /** Test-only: lets a suite swap the whole outside world before the code runs. */
@@ -122,6 +158,19 @@ export function refreshEnv(): void {
   env.page = detectPage();
   if (!env.gmRequest) env.gmRequest = detectGmRequest();
   if (!env.hls) env.hls = detectHls();
+  const next = detectStorage();
+  if (!env.gmGetValue) env.gmGetValue = next.get;
+  if (!env.gmSetValue) env.gmSetValue = next.set;
+  if (!env.gmDeleteValue) env.gmDeleteValue = next.del;
+  if (!env.gmRegisterMenuCommand) env.gmRegisterMenuCommand = detectMenu();
+}
+
+export function hasSettingsStorage(): boolean {
+  return typeof env.gmGetValue === 'function' && typeof env.gmSetValue === 'function';
+}
+
+export function hasMenu(): boolean {
+  return typeof env.gmRegisterMenuCommand === 'function';
 }
 
 /** Re-detects only hls.js, so a test that injected its own page keeps it. */

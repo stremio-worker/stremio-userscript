@@ -1,9 +1,9 @@
 // Whether the local service is answering at all.
 //
-// Every request this script makes through GM_xmlhttpRequest targets
-// http://127.0.0.1:11470, so a transport level failure means the local service is
-// not there, not that the CDN behind it hiccuped: the hop we would retry is the
-// hop that just failed.
+// Every request this script makes through GM_xmlhttpRequest targets the
+// configured local service (http://127.0.0.1:11470 by default), so a transport
+// level failure means the local service is not there, not that the CDN behind it
+// hiccuped: the hop we would retry is the hop that just failed.
 //
 // Once that has happened a couple of times in a row the script stops intervening
 // for the rest of the page load. A page whose own request to a dead local service
@@ -17,6 +17,7 @@ import { LOCAL_SERVICE_FAILURE_THRESHOLD } from './config';
 
 let consecutiveUnreachable = 0;
 let down = false;
+let circuitOrigin = '';
 
 export function isLocalServiceDown(): boolean {
   return down;
@@ -38,4 +39,11 @@ export function noteLocalReachable(): void {
 export function resetLocalServiceState(): void {
   consecutiveUnreachable = 0;
   down = false;
+}
+
+/** A new local URL is a new service: the circuit must not carry over. */
+export function resetLocalServiceCircuit(origin: string): void {
+  if (circuitOrigin === origin) return;
+  circuitOrigin = origin;
+  resetLocalServiceState();
 }

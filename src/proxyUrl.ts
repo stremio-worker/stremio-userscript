@@ -7,20 +7,12 @@
 // are accepted here. Everything that is not a local `/proxy/` URL is rejected
 // before any parsing happens, so the script never turns into an open relay.
 
-import {
-  ALLOWED_METHODS,
-  LOCAL_HOST,
-  LOCAL_ORIGIN,
-  LOCAL_PORT,
-  LOCAL_SCHEME,
-  MAX_UPSTREAM_URL_LENGTH,
-  PROXY_PATH_PREFIX,
-  type AllowedMethod,
-} from './config';
+import { ALLOWED_METHODS, MAX_UPSTREAM_URL_LENGTH, PROXY_PATH_PREFIX, type AllowedMethod } from './config';
 import { applyHeaders, type HeaderMap } from './headers';
 import { logOnce, safeUpstream } from './log';
 import { classifyTarget } from './ssrf';
-import { isLocalServiceDown } from './localService';
+import { isLocalServiceDown, resetLocalServiceCircuit } from './localService';
+import { getLocalOrigin, localOriginParts } from './settings';
 
 export interface ParsedProxyUrl {
   /** Absolute http(s) target the local server should be asked for. */
@@ -78,9 +70,10 @@ export function isLocalProxyUrl(value: unknown): URL | null {
   } catch {
     return null;
   }
-  if (url.protocol !== LOCAL_SCHEME) return null;
-  if (url.hostname !== LOCAL_HOST) return null;
-  if (url.port !== LOCAL_PORT) return null;
+  const local = localOriginParts();
+  if (url.protocol !== local.scheme) return null;
+  if (url.hostname !== local.host) return null;
+  if (url.port !== local.port) return null;
   if (url.username !== '' || url.password !== '') return null;
   if (url.hash !== '') return null;
   if (!url.pathname.startsWith(PROXY_PATH_PREFIX)) return null;
@@ -217,6 +210,7 @@ export function parseForInterception(
   // with one that fails after our own timeouts, so the page gets the native
   // behaviour, exactly as it would if this script were not installed.
   if (isLocalServiceDown()) return null;
+  resetLocalServiceCircuit(getLocalOrigin());
   return parseProxyUrl(value, options);
 }
 
@@ -235,7 +229,7 @@ export function parseForInterception(
  * resolved from.
  */
 export function buildProxyUrl(upstreamUrl: string, headers: HeaderMap = {}): string {
-  let out = `${LOCAL_ORIGIN}${PROXY_PATH_PREFIX}?d=${encodeURIComponent(upstreamUrl)}`;
+  let out = `${getLocalOrigin()}${PROXY_PATH_PREFIX}?d=${encodeURIComponent(upstreamUrl)}`;
   for (const name of Object.keys(headers)) {
     out += `&h=${encodeURIComponent(`${name}:${headers[name]}`)}`;
   }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { LOCAL_ORIGIN } from '../src/config';
+import { DEFAULT_LOCAL_ORIGIN as LOCAL_ORIGIN } from '../src/config';
 import {
   buildProxyUrl,
   isLocalProxyUrl,

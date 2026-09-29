@@ -11,7 +11,8 @@ itself, and only plays the local service's `/proxy/` requests through its own pa
 
 ## Requirements
 
-- The local service must be running and reachable at `http://127.0.0.1:11470`.
+- The local service must be running and reachable at `http://127.0.0.1:11470` (or whatever
+  you point the script at, see [Settings](#settings)).
 - A userscript manager that provides `GM_xmlhttpRequest` (Violentmonkey or Tampermonkey).
 - Stremio Web (`https://web.stremio.com/*`). No other site is targeted.
 - Node.js 20+, for building only.
@@ -33,6 +34,27 @@ npm run build          # dist/stremio-local-proxy-hls.user.js
 hls.js is not bundled: the `@require` line in `metadata.txt` makes the manager load it.
 `build.mjs` asserts that line is still there and that nothing hls.js-sized slipped into the
 output (a stray `import 'hls.js'` would silently inline a second ~1 MB player).
+
+## Settings
+
+The local service's URL is the one thing you can change, because it is the one thing the
+script cannot work out for itself. Open your userscript manager's menu for this script
+(Violentmonkey: the ⋮ on the script, Tampermonkey: the script's entry in the dashboard) and
+you get three commands:
+
+- **Set local service URL** — prompts for the origin, for example `http://192.168.1.50:11470`
+  or `127.0.0.1:11471`. It is stored with `GM_setValue` and used from the next page load on.
+- **Show local service URL** — what the script is currently using.
+- **Reset local service URL** — back to `http://127.0.0.1:11470`.
+
+Only a local origin is accepted: loopback, or a private address on your own network, over
+`http` or `https`. A public hostname is refused, because the local URL is the one host the
+script does not run its own request policy on, and it has to be a host you control. A stored
+value that no longer validates falls back to the default rather than standing the script
+down.
+
+There is deliberately no in-page settings UI. A control on `web.stremio.com` would mean
+touching the page, and staying out of the page is the whole point of this script.
 
 ## Releasing
 
@@ -98,6 +120,12 @@ The policy lives in `headers.ts`, `ssrf.ts` and `transport.ts`.
   included, can ever become a GM target, and the check runs a second time in `transport.ts`
   immediately before the manager is called: nothing gets out unless it passes the last
   gate.
+- **Local URL.** The one user-settable value is not a GM target: it is where the page's own
+  requests are recognised, so setting it decides which requests get intercepted, never
+  where this script sends anything. It is written only by the manager's menu, the page
+  cannot reach it, and it is refused unless it names a loopback or private address over
+  `http`/`https`. A value that no longer validates falls back to the default instead of
+  changing what gets intercepted.
 - **Timeout SSRF.** An address that only resolves when a lookup times out is not requested;
   only addresses that are statically public are accepted. A hostname that cannot be
   resolved statically cannot be reasoned about, and that is a known limit.
@@ -125,6 +153,8 @@ The policy lives in `headers.ts`, `ssrf.ts` and `transport.ts`.
 | --- | --- |
 | `src/index.ts` | Entry point, hook installation order, `pagehide` cleanup |
 | `src/config.ts` | Every tunable in one place; never read from the page or the network |
+| `src/settings.ts` | The one user-configurable value, validated and stored with GM_setValue |
+| `src/menu.ts` | The manager's menu commands, including the prompt for the local URL |
 | `src/env.ts` | The only path to the sandbox, `unsafeWindow`, GM and hls.js |
 | `src/capabilities.ts` | One environment check per page load; makes no request |
 | `src/localService.ts` | Whether the local service is answering at all |

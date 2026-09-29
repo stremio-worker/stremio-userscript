@@ -3,7 +3,7 @@ import test, { afterEach, beforeEach } from 'node:test';
 
 import { resetCapabilities } from '../src/capabilities';
 import { configureEnv, type HlsConstructor } from '../src/env';
-import { LOCAL_ORIGIN } from '../src/config';
+import { DEFAULT_LOCAL_ORIGIN as LOCAL_ORIGIN } from '../src/config';
 import { buildProxyUrl } from '../src/proxyUrl';
 import { resetTransportState, setStreamsSupported } from '../src/transport';
 import { installXhrHook, isXhrHookInstalled, uninstallXhrHook } from '../src/xhrHook';

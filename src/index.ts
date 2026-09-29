@@ -8,6 +8,8 @@ import { detectCapabilities } from './capabilities';
 import { destroyAllSessions, P } from './env';
 import { hasGm, refreshEnv } from './env';
 import { log, logOnce } from './log';
+import { registerMenu } from './menu';
+import { loadSettings } from './settings';
 import { installFetchHook } from './fetchHook';
 import { installSrcHook } from './srcHook';
 import { installXhrHook } from './xhrHook';
@@ -22,6 +24,12 @@ function guarded(name: string, run: () => boolean): void {
 
 function main(): void {
   refreshEnv();
+
+  // Before the hooks: the gate compares against the configured local origin, so
+  // a user who has changed it must not be filtered out by the default.
+  loadSettings();
+  registerMenu();
+
   if (!hasGm()) {
     // Without a userscript manager there is no way to reach 127.0.0.1. Stay
     // completely out of the page's way rather than half-hooking it.

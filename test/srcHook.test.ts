@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test, { afterEach, beforeEach } from 'node:test';
 
 import { detectCapabilities, resetCapabilities } from '../src/capabilities';
-import { HLS_CONFIG, LOCAL_ORIGIN } from '../src/config';
+import { DEFAULT_LOCAL_ORIGIN as LOCAL_ORIGIN, HLS_CONFIG } from '../src/config';
 import { configureEnv, destroyAllSessions, type HlsConstructor } from '../src/env';
 import { buildProxyUrl } from '../src/proxyUrl';
 import { getActiveSession, hasPlayableLevel } from '../src/session';

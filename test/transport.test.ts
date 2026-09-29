@@ -13,7 +13,7 @@ import {
   setStreamsSupported,
   TransportError,
 } from '../src/transport';
-import { LOCAL_ORIGIN } from '../src/config';
+import { DEFAULT_LOCAL_ORIGIN as LOCAL_ORIGIN } from '../src/config';
 import { createFakeGm, respond, type FakeGm } from './fakeGm';
 import { fakePage } from './fakes';
 
