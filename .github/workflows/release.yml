@@ -16,7 +16,9 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  # main ve tag push'u ayni anda tetiklenebilir; tek kuyrukta sirlaya alip
+  # yarismayi onluyoruz (ikinci calisma release'i gunceller).
+  group: release
   cancel-in-progress: false
 
 jobs:
@@ -55,14 +57,21 @@ jobs:
             exit 1
           fi
 
-      - name: tag zaten var mi
+      - name: release zaten var mi
         id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
-          if git rev-parse "refs/tags/${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+          # Git etiketi ile GitHub release'i farkli seyler. Etiket push'lanmis
+          # olabilir ama release henuz olusmus olmayabilir; bu yuzden gh ile
+          # soruyoruz, git ref'ine bakarak degil.
+          if gh release view "$TAG" >/dev/null 2>&1; then
             echo "value=true" >> "$GITHUB_OUTPUT"
-            echo "tag ${{ steps.version.outputs.tag }} zaten var, release guncellenecek"
+            echo "release $TAG zaten var, guncellenecek"
           else
             echo "value=false" >> "$GITHUB_OUTPUT"
+            echo "release $TAG yok, olusturulacak"
           fi
 
       - run: npm ci
