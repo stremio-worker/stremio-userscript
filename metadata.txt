@@ -1,0 +1,14 @@
+// ==UserScript==
+// @name         Stremio Local Proxy HLS
+// @namespace    https://github.com/stremio-worker/stremio-server-webos
+// @version      1.0.0
+// @description  Plays http://127.0.0.1:11470/proxy/ streams inside Stremio Web by routing them through GM_xmlhttpRequest and MSE (hls.js).
+// @author       stremio-worker
+// @match        https://web.stremio.com/*
+// @require      https://cdn.jsdelivr.net/npm/hls.js@1.7.3/dist/hls.min.js
+// @run-at       document-start
+// @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
+// @connect      *
+// @noframes
+// ==/UserScript==
