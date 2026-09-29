@@ -18,14 +18,28 @@ itself, and only plays the local service's `/proxy/` requests through its own pa
 
 ## Install
 
+Download `stremio-local-proxy-hls.user.js` from the
+[releases page](https://github.com/stremio-worker/stremio-server-webos/releases) and paste it
+into the manager's "add new script" screen, or point the manager at the file if it can read
+a local path. Reload the Stremio Web tab afterwards.
+
+To build it from source instead:
+
 ```bash
 npm install
 npm run build          # dist/stremio-local-proxy-hls.user.js
 ```
 
-Paste `dist/stremio-local-proxy-hls.user.js` into the manager's "add new script" screen, or
-point the manager at the file if it can read a local path. Reload the Stremio Web tab
-afterwards.
+hls.js is not bundled: the `@require` line in `metadata.txt` makes the manager load it.
+`build.mjs` asserts that line is still there and that nothing hls.js-sized slipped into the
+output (a stray `import 'hls.js'` would silently inline a second ~1 MB player).
+
+## Releasing
+
+Bump the version in **both** `package.json` (`version`) and `metadata.txt` (`@version`), then
+push to `main`. The `Release` workflow runs `typecheck`, `test` and `build:min`, attaches
+`dist/stremio-local-proxy-hls.user.js` to a `v<version>` release, and writes the notes from
+`release-notes.md`. The two version fields must match, otherwise the job fails.
 
 hls.js is not bundled: the `@require` line in `metadata.txt` makes the manager load it.
 `build.mjs` asserts that line is still there and that nothing hls.js-sized slipped into the

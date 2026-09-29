@@ -1,0 +1,98 @@
+name: Release
+
+# Her surum yukseltmesinde (package.json + metadata.txt) calisir.
+# Tag'i push ederek de tetiklenebilir: git tag v1.2.3 && git push origin v1.2.3
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Surum (bos birakilirsa package.json okunur)'
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: surumu belirle
+        id: version
+        run: |
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then
+            version=$(node -p "require('./package.json').version")
+          fi
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::gecersiz surum: $version"
+            exit 1
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "surum: $version"
+
+      - name: metadata.txt surumunun esitligini dogrula
+        run: |
+          meta=$(sed -n 's|^// @version[[:space:]]\+||p' metadata.txt)
+          if [ "$meta" != "${{ steps.version.outputs.value }}" ]; then
+            echo "::error::metadata.txt @version ($meta) != package.json (${{ steps.version.outputs.value }})"
+            exit 1
+          fi
+
+      - name: tag zaten var mi
+        id: existing
+        run: |
+          if git rev-parse "refs/tags/${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "value=true" >> "$GITHUB_OUTPUT"
+            echo "tag ${{ steps.version.outputs.tag }} zaten var, release guncellenecek"
+          else
+            echo "value=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build:min
+
+      - name: dist icerigini dogrula
+        run: |
+          artifact="dist/stremio-local-proxy-hls.user.js"
+          if [ ! -s "$artifact" ]; then
+            echo "::error::$artifact bos ya da yok"
+            exit 1
+          fi
+          echo "$(wc -c < "$artifact") bayt, $artifact"
+
+      - name: release olustur / guncelle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.value }}
+          EXISTING: ${{ steps.existing.outputs.value }}
+        run: |
+          if [ "$EXISTING" = "true" ]; then
+            gh release edit "$TAG" --title "v$VERSION" --notes-file release-notes.md
+            gh release upload "$TAG" dist/*.user.js --clobber
+            echo "guncellendi: $TAG"
+          else
+            gh release create "$TAG" dist/*.user.js \
+              --title "v$VERSION" \
+              --notes-file release-notes.md
+            echo "olusturuldu: $TAG"
+          fi

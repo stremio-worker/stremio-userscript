@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: version consistency
+        run: |
+          pkg=$(node -p "require('./package.json').version")
+          meta=$(sed -n 's|^// @version[[:space:]]\+||p' metadata.txt)
+          echo "package.json: $pkg"
+          echo "metadata.txt: $meta"
+          if [ "$pkg" != "$meta" ]; then
+            echo "::error::package.json ($pkg) and metadata.txt ($meta) versions differ"
+            exit 1
+          fi
+
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
