@@ -14,6 +14,8 @@ itself, and only plays the local service's `/proxy/` requests through its own pa
 - The local service must be running and reachable at `http://127.0.0.1:11470` (or whatever
   you point the script at, see [Settings](#settings)).
 - A userscript manager that provides `GM_xmlhttpRequest` (Violentmonkey or Tampermonkey).
+  On Tampermonkey, also set **Settings → Security → Check @connect:** to **Casual**, see
+  [Install](#install).
 - Stremio Web (`https://web.stremio.com/*`). No other site is targeted.
 - Node.js 20+, for building only.
 
@@ -23,6 +25,14 @@ Download `stremio-local-proxy-hls.user.js` from the
 [releases page](https://github.com/stremio-worker/stremio-userscript/releases) and paste it
 into the manager's "add new script" screen, or point the manager at the file if it can read
 a local path. Reload the Stremio Web tab afterwards.
+
+**Tampermonkey:** open **Settings → Security** and set **Check @connect:** to **Casual**.
+The script declares `@connect *`, because the CDN host is not known until a playlist names
+it. With the default setting, Tampermonkey stops at a confirmation dialog the first time
+each new CDN host is requested, and a dialog that times out looks to the script exactly like
+a blocked request. `Casual` is the mode that allows those requests without prompting. Nothing
+else in Security needs changing, and the script's own `ssrf.ts` policy still decides what is
+actually fetched: the setting is about Tampermonkey prompting you, not about what goes out.
 
 To build it from source instead:
 
